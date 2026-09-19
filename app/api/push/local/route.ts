@@ -13,10 +13,6 @@ const REQUEST_TIMEOUT = 15000
 const DEPOSIT_LOAN_URL =
   "https://dashboard.kooturavu.tn.gov.in/v1/api/uccs/deposit_loan/upsert"
 
-const MEMBER_DEPOSIT_LOAN_URL =
-  "https://dashboard.kooturavu.tn.gov.in/v1/api/uccs/deposit_loan_details"
-
-
 const JEWEL_URL =
   "https://dashboard.kooturavu.tn.gov.in/v1/api/uccs/jwel/upsert"
 
@@ -137,17 +133,15 @@ export async function POST(req: Request) {
         const { sds_code, report_date } = last.rows[0]
 
         /* ---------- FETCH DATA ---------- */
-        const [members, deposits, loans, jewels,memberwise] = await Promise.all([
+        const [members, deposits, loans, jewels] = await Promise.all([
           client.query(`SELECT * FROM members WHERE sds_code=$1 AND date=$2`, [sds_code, report_date]),
           client.query(`SELECT * FROM deposits WHERE sds_code=$1 AND date=$2`, [sds_code, report_date]),
           client.query(`SELECT * FROM loans WHERE sds_code=$1 AND date=$2`, [sds_code, report_date]),
           client.query(`SELECT * FROM jewel_details WHERE sds_code=$1 AND date=$2`, [sds_code, report_date]),
-          client.query(`SELECT * FROM deposit_loan_details_memberwise WHERE sds_code=$1 AND date=$2`, [sds_code, report_date]),
         ])
 
         const depositLoanResponses: any[] = []
         const jewelResponses: any[] = []
-        const memberwiseResponses: any[] = []
 
         /* ---------- DEPOSIT / LOAN / MEMBER ---------- */
         const combined = [
@@ -155,73 +149,6 @@ export async function POST(req: Request) {
           ...deposits.rows.map(r => ({ ...r, modules: "Deposits" })),
           ...loans.rows.map(r => ({ ...r, modules: "Loans" })),
         ]
-
-        /* ---------- MEMBERWISE DEPOSIT / LOAN ---------- */
-
-        /* ---------- MEMBERWISE DEPOSIT / LOAN ---------- */
-
-for (
-  let i = 0;
-  i < memberwise.rows.length;
-  i += BATCH_SIZE
-) {
-  const batch = memberwise.rows.slice(
-    i,
-    i + BATCH_SIZE
-  )
-
-  const payload = batch.map(r => ({
-    sds_code: r.sds_code,
-
-    ercs_society_id: r.ercs_society_id,
-
-    member_id: r.member_id,
-
-    account_opening_date:
-      toDateOnly(r.account_opening_date),
-
-    gender: r.gender,
-
-    // DB column = age
-    // API field = member_age
-    member_age: Number(r.age || 0),
-
-    loan_scheme_name:
-      r.loan_scheme_name,
-
-    loan_amt:
-      Number(r.loan_amt || 0),
-
-    deposit_scheme_name:
-      r.deposit_scheme_name,
-
-    deposit_amt:
-      Number(r.deposit_amt || 0),
-  }))
-
-  const res = DRY_RUN
-    ? {
-        dryRun: true,
-        payload,
-      }
-    : await safeFetch(
-        MEMBER_DEPOSIT_LOAN_URL,
-        payload
-      )
-
-  memberwiseResponses.push(res)
-
-  await logPushStatus({
-    source: "Server",
-    clientName,
-    fromDate,
-    module: "MEMBER_DEPOSIT_LOAN_DETAILS",
-    response: res,
-    status: DRY_RUN ? "DRY_RUN" : res?.success ? "SUCCESS" : "FAILED",
-  })
-}
-
-
 
         for (let i = 0; i < combined.length; i += BATCH_SIZE) {
           const batch = combined.slice(i, i + BATCH_SIZE)
@@ -297,7 +224,6 @@ for (
           report_date: toDateOnly(report_date),
           deposit_loan: depositLoanResponses,
           jewel: jewelResponses,
-          member_deposit_loan_details:memberwiseResponses,
         })
 
       } catch (err: any) {

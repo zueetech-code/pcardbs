@@ -12,7 +12,7 @@ export async function GET() {
   module,
   status,
   created_at
-FROM push_logs
+FROM pcardb_push_logs
 ORDER BY created_at DESC;
     `);
     //console.log("Push logs query result:", result.rows);
