@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   }
 
-  const hash = await bcrypt.hash(password, 10)
+  const hash = await bcrypt.hash(password, 6)
 
   await pool.query(
     `INSERT INTO users (email,password,role,active,created_at)
