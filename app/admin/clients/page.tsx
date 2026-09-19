@@ -21,6 +21,7 @@ export default function ClientsPage() {
   const [liveClients, setLiveClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string>("admin")
+  const [now, setNow] = useState(Date.now());
   
 
   /*** ================= NEW STATES FOR DISTRICT-DRILLDOWN ================= ***/
@@ -81,6 +82,17 @@ export default function ClientsPage() {
 // }, [])
 
   /* ================= STATS ================= */
+  useEffect(() => {
+
+  const timer = setInterval(() => {
+    setNow(Date.now());
+  }, 1000);
+
+  return () => {
+    clearInterval(timer);
+  };
+
+}, []);
 
   const stats = useMemo(() => {
     const total = liveClients.length
@@ -89,7 +101,7 @@ export default function ClientsPage() {
     ).length
     const offline = total - online
     return { total, online, offline }
-  }, [liveClients])
+  }, [liveClients,now])
 
   /* ================= DISTRICT-WISE STATS ================= */
 

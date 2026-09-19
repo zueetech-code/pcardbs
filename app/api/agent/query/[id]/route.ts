@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/agent-auth";
-import {pool} from "@/lib/db";
+import { pool } from "@/lib/db";
 
 type RouteContext = {
   params: Promise<{
@@ -14,18 +14,16 @@ export async function GET(
 ) {
   try {
     // ============================================================
-    // 1. AUTHENTICATE AGENT
+    // 1. AUTHENTICATE
     // ============================================================
 
-    const agent =
-      await authenticateAgent(request);
+    const agent = await authenticateAgent(request);
 
     // ============================================================
-    // 2. GET QUERY ID
+    // 2. QUERY ID
     // ============================================================
 
-    const { id } =
-      await context.params;
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json(
@@ -40,41 +38,31 @@ export async function GET(
     }
 
     // ============================================================
-    // 3. FIND QUERY ASSIGNED TO THIS AGENT
-    // ============================================================
-    //
-    // assigned_agents is TEXT[]
-    //
-    // We check:
-    //
-    // agent.agentUid = ANY(assigned_agents)
-    //
-    // This prevents one agent from retrieving another agent's
-    // query.
-    //
+    // 3. FIND ASSIGNED QUERY
     // ============================================================
 
-    const result =
-      await pool.query(
-        `
-        SELECT
-          id,
-          name,
-          sql,
-          assigned_agents,
-          variables,
-          created_at
-        FROM queries
-        WHERE id = $1
-        LIMIT 1
-        `,
-        [
-          id
-        ]
-      );
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        name,
+        sql,
+        assigned_agents,
+        variables,
+        created_at
+      FROM queries
+      WHERE id = $1
+        AND $2 = ANY(assigned_agents)
+      LIMIT 1
+      `,
+      [
+        id,
+        agent.agentUid,
+      ]
+    );
 
     // ============================================================
-    // 4. QUERY NOT FOUND
+    // 4. NOT FOUND / NOT ASSIGNED
     // ============================================================
 
     if (result.rows.length === 0) {
@@ -90,35 +78,23 @@ export async function GET(
       );
     }
 
-    const query =
-      result.rows[0];
+    const query = result.rows[0];
 
     // ============================================================
-    // 5. RETURN QUERY
+    // 5. RETURN
     // ============================================================
 
     return NextResponse.json(
       {
         success: true,
-
         query: {
-          id:
-            query.id,
-
-          name:
-            query.name,
-
-          sql:
-            query.sql,
-
+          id: query.id,
+          name: query.name,
+          sql: query.sql,
           assigned_agents:
             query.assigned_agents,
-
-          variables:
-            query.variables,
-
-          created_at:
-            query.created_at,
+          variables: query.variables,
+          created_at: query.created_at,
         },
       },
       {
@@ -127,7 +103,6 @@ export async function GET(
     );
 
   } catch (error) {
-
     console.error(
       "Agent query API error:",
       error
@@ -138,17 +113,9 @@ export async function GET(
         ? error.message
         : "Failed to get query";
 
-    // ============================================================
-    // AUTH ERROR
-    // ============================================================
-
     if (
-      message
-        .toLowerCase()
-        .includes("token") ||
-      message
-        .toLowerCase()
-        .includes("authorization")
+      message.toLowerCase().includes("token") ||
+      message.toLowerCase().includes("authorization")
     ) {
       return NextResponse.json(
         {
@@ -160,10 +127,6 @@ export async function GET(
         }
       );
     }
-
-    // ============================================================
-    // SERVER ERROR
-    // ============================================================
 
     return NextResponse.json(
       {

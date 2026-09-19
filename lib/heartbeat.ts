@@ -1,20 +1,35 @@
-export type HeartbeatStatus = "online" | "offline"
+export type HeartbeatStatus = "online" | "offline";
 
-const OFFLINE_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
+const OFFLINE_THRESHOLD_MS = 30 * 1000; // 30 seconds
 
 export function resolveHeartbeatStatus(
   lastSeen?: string | Date | null
 ): HeartbeatStatus {
 
-  if (!lastSeen) return "offline"
+  if (!lastSeen) {
+    return "offline";
+  }
 
-  const lastSeenTime = new Date(lastSeen).getTime()
+  const lastSeenTime =
+    new Date(lastSeen).getTime();
 
-  if (isNaN(lastSeenTime)) return "offline" // ✅ safety
+  if (Number.isNaN(lastSeenTime)) {
+    return "offline";
+  }
 
-  const now = Date.now()
+  const now = Date.now();
 
-  return now - lastSeenTime > OFFLINE_THRESHOLD_MS
-    ? "offline"
-    : "online"
+  const elapsed = now - lastSeenTime;
+
+  // Future timestamp = invalid heartbeat
+  if (elapsed < 0) {
+    return "offline";
+  }
+
+  // Older than 30 seconds = offline
+  if (elapsed > OFFLINE_THRESHOLD_MS) {
+    return "offline";
+  }
+
+  return "online";
 }

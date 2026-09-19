@@ -1,50 +1,148 @@
-import { NextResponse } from "next/server"
-import { pool } from "@/lib/db"
+import { NextResponse } from "next/server";
+import { pool } from "@/lib/db";
+
+function sleep(ms: number) {
+  return new Promise(resolve =>
+    setTimeout(resolve, ms)
+  );
+}
 
 export async function POST(req: Request) {
-
-  const body = await req.json()
-  console.log("📦 BODY:", body)
-
-  const { clientId, date, modules = [] } = body
-
-  const client = await pool.connect()
- 
+  const client = await pool.connect();
 
   try {
+    // ============================================================
+    // 1. READ REQUEST
+    // ============================================================
 
-    console.log("🚀 RUN CLIENT:", clientId)
-    console.log("📦 MODULES:", modules)
+    const body = await req.json();
 
-    /* ================= GET CLIENT ================= */
+    console.log("📦 BODY:", body);
 
-    const clientRes = await client.query(
-      `SELECT * FROM clients WHERE client_id = $1`,
-      [clientId]
-    )
+    const {
+      clientId,
+      date,
+      modules = [],
+    } = body;
 
-    const clientData = clientRes.rows[0]
-    let globalSDSCode: string | null = null
-    
-
-    if (!clientData) {
-      return NextResponse.json({ error: "Client not found" })
+    if (!clientId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "clientId is required",
+        },
+        {
+          status: 400,
+        }
+      );
     }
 
-    const agentUid = clientData.agent_uid
+    if (!date) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "date is required",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-    /* ================= GET QUERIES ================= */
+    // ============================================================
+    // 2. GET CLIENT
+    // ============================================================
+
+    console.log(
+      "🚀 RUN CLIENT:",
+      clientId
+    );
+
+    console.log(
+      "📦 MODULES:",
+      modules
+    );
+
+    const clientRes = await client.query(
+      `
+      SELECT *
+      FROM clients
+      WHERE client_id = $1
+      LIMIT 1
+      `,
+      [clientId]
+    );
+
+    const clientData =
+      clientRes.rows[0];
+
+    if (!clientData) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Client not found",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    const agentUid =
+      clientData.agent_uid;
+
+    if (!agentUid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "No agent assigned to this client",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ============================================================
+    // 3. GET ASSIGNED QUERIES
+    // ============================================================
+    //
+    // IMPORTANT:
+    //
+    // Only queries assigned to this agent.
+    //
+    // ORDER BY created_at / id gives deterministic execution.
+    //
+    // ============================================================
 
     const queryRes = await client.query(
-      `SELECT * FROM queries WHERE $1 = ANY(assigned_agents)`,
+      `
+      SELECT
+        id,
+        name,
+        sql,
+        assigned_agents,
+        variables,
+        created_at
+      FROM queries
+      WHERE $1 = ANY(assigned_agents)
+      ORDER BY created_at ASC, id ASC
+      `,
       [agentUid]
-    )
+    );
 
-    const queries = queryRes.rows
+    const queries =
+      queryRes.rows;
 
-    console.log("📊 TOTAL QUERIES:", queries.length)
+    console.log(
+      "📊 TOTAL ASSIGNED QUERIES:",
+      queries.length
+    );
 
-    /* ================= REPORT INIT ================= */
+    // ============================================================
+    // 4. REPORT
+    // ============================================================
 
     const report: any = {
       clientId,
@@ -56,296 +154,851 @@ export async function POST(req: Request) {
       deposit: [],
       loan: [],
       jewel: [],
-      memberwise:[]
-    }
+      memberwise: [],
 
-    /* ================= RUN QUERIES ================= */
+      npa: {
+        SDSCode: "TEMP_SDS",
+        Date: date,
+      },
+    };
 
-    for (const q of queries) {
+    // ============================================================
+    // 5. FILTER QUERIES
+    // ============================================================
 
-      const name = (q.name || "").toLowerCase()
+    const selectedQueries =
+      queries.filter((q: any) => {
 
-      /* 🔥 MODULE FILTERING */
+        const name =
+          String(q.name || "")
+            .toLowerCase();
 
-      if (modules.length > 0) {
+        // No module selection
+        // => run every assigned query
+        if (
+          !Array.isArray(modules) ||
+          modules.length === 0
+        ) {
+          return true;
+        }
 
-  let shouldRun = false;
+        // --------------------------------------------------------
+        // Query classification
+        // --------------------------------------------------------
 
-  if (
-      (modules.includes("member") && name.includes("deposit")) ||
-      (modules.includes("deposit") && name.includes("deposit")) ||
-      (modules.includes("loan") && name.includes("deposit")) ||
-      (modules.includes("jewel") && name.includes("jewel")) ||
-      (modules.includes("branch") && name.includes("branch")) ||
-      (modules.includes("memberwise") && name.includes("memberwise"))
-  ) {
-      shouldRun = true;
-  }
+        if (
+          name.includes("memberwise")
+        ) {
+          return modules.includes(
+            "memberwise"
+          );
+        }
 
-  // Query has no module keyword -> run it
-  if (
-      !name.includes("deposit") &&
-      !name.includes("jewel") &&
-      !name.includes("branch") &&
-      !name.includes("memberwise") 
-  ) {
-      shouldRun = true;
-  }
+        if (
+          name.includes("jewel")
+        ) {
+          return modules.includes(
+            "jewel"
+          );
+        }
 
-  if (!shouldRun) {
-      console.log("⏭ Skipping query:", q.name);
-      continue;
-  }
-}
+        if (
+          name.includes("branch")
+        ) {
+          return modules.includes(
+            "branch"
+          );
+        }
 
-      console.log("▶ Running query:", q.name)
+        if (
+          name.includes("deposit")
+        ) {
+          return (
+            modules.includes("member") ||
+            modules.includes("deposit") ||
+            modules.includes("loan")
+          );
+        }
 
-      /* ===== CREATE COMMAND ===== */
+        // Query without known module keyword
+        return true;
+      });
 
-      const cmdRes = await client.query(
-        `
-        INSERT INTO commands (
-          client_id, agent_uid, query_id, sql,
-          variables, status, created_at
-        )
-        VALUES ($1,$2,$3,$4,$5,'pending',NOW())
-        RETURNING id
-        `,
-        [
-          clientId,
-          agentUid,
-          q.id,
-          q.sql,
-          JSON.stringify({ Fromdate: date })
-        ]
+    console.log(
+      "📋 QUERIES TO EXECUTE:",
+      selectedQueries.map(
+        (q: any) => ({
+          id: q.id,
+          name: q.name,
+        })
       )
+    );
 
-      const commandId = cmdRes.rows[0].id
+    // ============================================================
+    // 6. EXECUTE ONE QUERY AT A TIME
+    // ============================================================
 
-      /* ===== WAIT FOR AGENT ===== */
+    for (
+      let index = 0;
+      index < selectedQueries.length;
+      index++
+    ) {
 
-      let status = "pending"
+      const q =
+        selectedQueries[index];
+
+      const queryNumber =
+        index + 1;
+
+      const queryName =
+        q.name || `Query ${queryNumber}`;
+
+      const queryNameLower =
+        queryName.toLowerCase();
+
+      console.log(
+        "================================================"
+      );
+
+      console.log(
+        `▶ START QUERY ${queryNumber}/${selectedQueries.length}:`,
+        queryName
+      );
+
+      console.log(
+        "🆔 QUERY ID:",
+        q.id
+      );
+
+      // ==========================================================
+      // 6.1 CREATE COMMAND
+      // ==========================================================
+
+      const cmdRes =
+        await client.query(
+          `
+          INSERT INTO commands (
+            client_id,
+            agent_uid,
+            query_id,
+            sql,
+            variables,
+            status,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            'pending',
+            NOW(),
+            NOW()
+          )
+          RETURNING id
+          `,
+          [
+            clientId,
+            agentUid,
+            q.id,
+            q.sql,
+            JSON.stringify({
+              Fromdate: date,
+            }),
+          ]
+        );
+
+      const commandId =
+        String(cmdRes.rows[0].id);
+
+      console.log(
+        "📤 COMMAND CREATED:",
+        commandId
+      );
+
+      // ==========================================================
+      // 6.2 WAIT UNTIL AGENT FINISHES THIS QUERY
+      // ==========================================================
+      //
+      // Query 2 is NOT created yet.
+      //
+      // ==========================================================
+
+      let status = "pending";
+
+      const startedWaiting =
+        Date.now();
+
+      const MAX_WAIT =
+        30 * 60 * 1000; // 30 minutes
 
       while (true) {
 
-        const statusRes = await client.query(
-          `SELECT status FROM commands WHERE id=$1`,
+        const statusRes =
+          await client.query(
+            `
+            SELECT
+              status,
+              result,
+              error,
+              completed_at
+            FROM commands
+            WHERE id = $1
+            LIMIT 1
+            `,
+            [commandId]
+          );
+
+        if (
+          statusRes.rows.length === 0
+        ) {
+          throw new Error(
+            `Command ${commandId} disappeared`
+          );
+        }
+
+        const commandStatus =
+          statusRes.rows[0];
+
+        status =
+          commandStatus.status;
+
+        console.log(
+          `⏳ QUERY ${queryNumber} STATUS:`,
+          status
+        );
+
+        // --------------------------------------------------------
+        // SUCCESS
+        // --------------------------------------------------------
+
+        if (
+          status === "success"
+        ) {
+          break;
+        }
+
+        // --------------------------------------------------------
+        // FAILED
+        // --------------------------------------------------------
+
+        if (
+          status === "failed"
+        ) {
+          console.error(
+            `❌ QUERY FAILED: ${queryName}`,
+            commandStatus.error ||
+              commandStatus.result
+          );
+
+          break;
+        }
+
+        // --------------------------------------------------------
+        // TIMEOUT
+        // --------------------------------------------------------
+
+        if (
+          Date.now() -
+            startedWaiting >
+          MAX_WAIT
+        ) {
+
+          await client.query(
+            `
+            UPDATE commands
+            SET
+              status = 'failed',
+              error = $2,
+              result = $2,
+              completed_at = NOW(),
+              updated_at = NOW()
+            WHERE id = $1
+              AND status IN ('pending', 'running')
+            `,
+            [
+              commandId,
+              "Command execution timeout after 30 minutes",
+            ]
+          );
+
+          status = "failed";
+
+          console.error(
+            `⏰ QUERY TIMEOUT: ${queryName}`
+          );
+
+          break;
+        }
+
+        // --------------------------------------------------------
+        // WAIT
+        // --------------------------------------------------------
+
+        await sleep(1500);
+      }
+
+      // ==========================================================
+      // 6.3 FAILED QUERY
+      // ==========================================================
+
+      if (
+        status !== "success"
+      ) {
+
+        console.error(
+          `⚠ Skipping failed query: ${queryName}`
+        );
+
+        // Continue to next assigned query
+        continue;
+      }
+
+      // ==========================================================
+      // 6.4 FETCH RESULT
+      // ==========================================================
+
+      console.log(
+        `📥 FETCH RESULT FOR: ${queryName}`
+      );
+
+      const resultRes =
+        await client.query(
+          `
+          SELECT
+            id,
+            command_id,
+            table_name,
+            query_type,
+            row_count,
+            columns,
+            row_data,
+            created_at
+          FROM query_results
+          WHERE command_id = $1
+          ORDER BY id DESC
+          LIMIT 1
+          `,
           [commandId]
-        )
+        );
 
-        status = statusRes.rows[0]?.status
+      if (
+        resultRes.rows.length === 0
+      ) {
 
-        if (status === "success" || status === "failed") break
+        console.error(
+          `⚠ NO RESULT FOR: ${queryName}`
+        );
 
-        await new Promise(r => setTimeout(r, 1500))
+        continue;
       }
 
-      console.log("✔ Query status:", status)
+      const storedResult =
+        resultRes.rows[0];
 
-      if (status !== "success") continue
-
-      /* ===== FETCH RESULTS ===== */
-
-      const resultRes = await client.query(
-        `
-        SELECT row_data
-        FROM query_results
-        WHERE command_id = $1
-        `,
-        [commandId]
-      )
-
-      if (!resultRes.rows.length) {
-        console.log("⚠ No results:", q.name)
-        continue
-      }
+      const resultData =
+        storedResult.row_data || {};
 
       const rows =
-  resultRes.rows[0]?.row_data?.rows || []
-      // 🔥 CAPTURE SDS FROM ANY QUERY RESULT
+        Array.isArray(
+          resultData.rows
+        )
+          ? resultData.rows
+          : [];
 
-if (!globalSDSCode && rows.length > 0) {
+      console.log(
+        `📊 RESULT ROWS: ${rows.length}`
+      );
 
-  const firstRow = rows[0]
+      // ==========================================================
+      // 6.5 SDS CODE
+      // ==========================================================
 
-  globalSDSCode =
-    firstRow?.sdscode ||
-    firstRow?.SDSCODE ||
-    firstRow?.sds_code ||
-    firstRow?.sdsCode ||
-    null
+      let sdsCode =
+        report.npa?.SDSCode;
 
-  console.log("📌 SDS DETECTED:", globalSDSCode, "FROM:", q.name)
-}
+      if (
+        !sdsCode ||
+        sdsCode === "TEMP_SDS"
+      ) {
 
-/* ================= ADD HERE ================= */
+        for (
+          const row of rows
+        ) {
 
-/* 🔹 BUILD PARTIAL REPORT */
+          const detected =
+            row?.sdscode ??
+            row?.SDSCODE ??
+            row?.sds_code ??
+            row?.sdsCode ??
+            null;
 
-const partialReport: any = {
-  clientName: clientData.name,
-  npa: {
-    SDSCode: globalSDSCode  ||
-      "TEMP_SDS",
-    Date: date
-  },
- 
-}
+          if (detected) {
+            sdsCode =
+              String(detected);
 
-/* 🔹 MAP MODULE DATA */
-
-if (name.includes("deposit")) {
-
-  partialReport.member = rows.filter((r:any)=>
-    (r.modules || "").toLowerCase() === "members"
-  )
-
-  partialReport.deposit = rows.filter((r:any)=>
-    (r.modules || "").toLowerCase() === "deposits"
-  )
-
-  partialReport.loan = rows.filter((r:any)=>
-    (r.modules || "").toLowerCase() === "loans"
-  )
-}
-
-if (name.includes("jewel")) {
-  partialReport.jewel = rows
-}
-
-if (name.includes("branch")) {
-  partialReport.branch = rows
-}
-
-if (name.includes("memberwise")) {
-  partialReport.memberwise = rows
-}
-
-/* 🔹 CALL SAVE REPORT */
-
-const saveRes = await fetch(
-  process.env.NEXT_PUBLIC_BASE_URL + "/api/save-report",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(partialReport)
-  }
-)
-
-const saveData = await saveRes.json()
-console.log(saveData)
-
-if (!saveRes.ok) {
-  console.error("❌ SAVE FAILED:", saveData)
-} else {
-  console.log("✅ SAVED:", q.name)
-}
-
-/* ================= CONTINUE NORMAL FLOW ================= */
-
-      /* ================= MAP DATA ================= */
-
-      // ✅ BRANCH
-      if (name.includes("branch")) {
-        report.branch.push(...rows)
-        
+            break;
+          }
+        }
       }
 
-      // ✅ MEMBER / DEPOSIT / LOAN (same query)
-      if (name.includes("deposit")) {
+      if (
+        sdsCode &&
+        sdsCode !== "TEMP_SDS"
+      ) {
 
-        const members = rows.filter((r:any)=>
-          (r.modules || "").toLowerCase() === "members"
-        )
+        report.npa.SDSCode =
+          sdsCode;
 
-        const deposits = rows.filter((r:any)=>
-          (r.modules || "").toLowerCase() === "deposits"
-        )
-
-        const loans = rows.filter((r:any)=>
-          (r.modules || "").toLowerCase() === "loans"
-        )
-
-        if (modules.length === 0 || modules.includes("member"))
-          report.member.push(...members)
-
-        if (modules.length === 0 || modules.includes("deposit"))
-          report.deposit.push(...deposits)
-
-        if (modules.length === 0 || modules.includes("loan"))
-          report.loan.push(...loans)
+        console.log(
+          "📌 SDS CODE:",
+          sdsCode
+        );
       }
 
-      // ✅ JEWEL
-      if (name.includes("jewel")) {
-        if (modules.length === 0 || modules.includes("jewel"))
-          report.jewel.push(...rows)
+      // ==========================================================
+      // 6.6 MAP RESULT INTO REPORT
+      // ==========================================================
+
+      if (
+        queryNameLower.includes(
+          "branch"
+        )
+      ) {
+
+        if (
+          !Array.isArray(
+            report.branch
+          )
+        ) {
+          report.branch = [];
+        }
+
+        report.branch.push(
+          ...rows
+        );
       }
-      if (name.includes("memberwise")) {
-         if (modules.length === 0 || modules.includes("memberwise"))
-          report.memberwise.push(...rows)
+
+      // ----------------------------------------------------------
+      // MEMBER / DEPOSIT / LOAN
+      // ----------------------------------------------------------
+
+      if (
+        queryNameLower.includes(
+          "deposit"
+        )
+      ) {
+
+        const members =
+          rows.filter(
+            (r: any) =>
+              String(
+                r?.modules || ""
+              ).toLowerCase() ===
+              "members"
+          );
+
+        const deposits =
+          rows.filter(
+            (r: any) =>
+              String(
+                r?.modules || ""
+              ).toLowerCase() ===
+              "deposits"
+          );
+
+        const loans =
+          rows.filter(
+            (r: any) =>
+              String(
+                r?.modules || ""
+              ).toLowerCase() ===
+              "loans"
+          );
+
+        if (
+          !Array.isArray(
+            report.member
+          )
+        ) {
+          report.member = [];
+        }
+
+        if (
+          !Array.isArray(
+            report.deposit
+          )
+        ) {
+          report.deposit = [];
+        }
+
+        if (
+          !Array.isArray(
+            report.loan
+          )
+        ) {
+          report.loan = [];
+        }
+
+        if (
+          modules.length === 0 ||
+          modules.includes("member")
+        ) {
+          report.member.push(
+            ...members
+          );
+        }
+
+        if (
+          modules.length === 0 ||
+          modules.includes("deposit")
+        ) {
+          report.deposit.push(
+            ...deposits
+          );
+        }
+
+        if (
+          modules.length === 0 ||
+          modules.includes("loan")
+        ) {
+          report.loan.push(
+            ...loans
+          );
+        }
+      }
+
+      // ----------------------------------------------------------
+      // JEWEL
+      // ----------------------------------------------------------
+
+      if (
+        queryNameLower.includes(
+          "jewel"
+        )
+      ) {
+
+        if (
+          !Array.isArray(
+            report.jewel
+          )
+        ) {
+          report.jewel = [];
+        }
+
+        if (
+          modules.length === 0 ||
+          modules.includes("jewel")
+        ) {
+          report.jewel.push(
+            ...rows
+          );
+        }
+      }
+
+      // ----------------------------------------------------------
+      // MEMBERWISE
+      // ----------------------------------------------------------
+
+      if (
+        queryNameLower.includes(
+          "memberwise"
+        )
+      ) {
+
+        if (
+          !Array.isArray(
+            report.memberwise
+          )
+        ) {
+          report.memberwise = [];
+        }
+
+        if (
+          modules.length === 0 ||
+          modules.includes("memberwise")
+        ) {
+          report.memberwise.push(
+            ...rows
+          );
+        }
+      }
+
+      // ==========================================================
+      // 6.7 SAVE PARTIAL REPORT
+      // ==========================================================
+
+      const partialReport = {
+        clientId,
+
+        clientName:
+          clientData.name,
+
+        fromDate: date,
+
+        npa: {
+          SDSCode:
+            report.npa.SDSCode ||
+            "TEMP_SDS",
+
+          Date: date,
+        },
+
+        branch:
+          report.branch,
+
+        member:
+          report.member,
+
+        deposit:
+          report.deposit,
+
+        loan:
+          report.loan,
+
+        jewel:
+          report.jewel,
+
+        memberwise:
+          report.memberwise,
+      };
+
+      // ==========================================================
+      // SAVE REPORT
+      // ==========================================================
+
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BASE_URL;
+
+      if (!baseUrl) {
+        throw new Error(
+          "NEXT_PUBLIC_BASE_URL is not configured"
+        );
+      }
+
+      console.log(
+        "💾 SAVING PARTIAL REPORT:",
+        queryName
+      );
+
+      const saveRes =
+        await fetch(
+          `${baseUrl}/api/save-report`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                partialReport
+              ),
+          }
+        );
+
+      let saveData: any;
+
+      try {
+        saveData =
+          await saveRes.json();
+      } catch {
+        saveData = null;
+      }
+
+      if (
+        !saveRes.ok
+      ) {
+
+        console.error(
+          "❌ SAVE FAILED:",
+          saveData
+        );
+
+      } else {
+
+        console.log(
+          "✅ PARTIAL REPORT SAVED:",
+          queryName
+        );
+      }
+
+      // ==========================================================
+      // 6.8 QUERY FINISHED
+      // ==========================================================
+
+      console.log(
+        `✅ QUERY ${queryNumber}/${selectedQueries.length} FINISHED:`,
+        queryName
+      );
+
+      console.log(
+        "------------------------------------------------"
+      );
+
+      // ==========================================================
+      // NEXT LOOP ITERATION
+      //
+      // ONLY NOW WILL THE NEXT COMMAND BE CREATED.
+      //
+      // ==========================================================
+    }
+
+    // ============================================================
+    // 7. FINAL NPA
+    // ============================================================
+
+    if (
+      report.npa.SDSCode ===
+      "TEMP_SDS"
+    ) {
+
+      const branchSds =
+        report.branch?.[0]?.sdscode ??
+        report.branch?.[0]?.SDSCODE ??
+        report.branch?.[0]?.sds_code ??
+        report.branch?.[0]?.sdsCode ??
+        null;
+
+      if (branchSds) {
+        report.npa.SDSCode =
+          String(branchSds);
       }
     }
 
-    /* ================= NPA FALLBACK ================= */
+    report.npa.Date =
+      date;
 
-    report.npa = {
-      SDSCode:
-        report.branch?.[0]?.sdscode ||
-        report.branch?.[0]?.SDSCODE ||
-        "TEMP_SDS",
-      Date: date
-    }
-
-    /* ================= COLUMN ORDER ================= */
+    // ============================================================
+    // 8. COLUMN ORDERS
+    // ============================================================
 
     report.branchColumnOrder =
-      report.branch.length ? Object.keys(report.branch[0]) : []
+      report.branch.length > 0
+        ? Object.keys(
+            report.branch[0]
+          )
+        : [];
 
     report.memberColumnOrder =
-      report.member.length ? Object.keys(report.member[0]) : []
+      report.member.length > 0
+        ? Object.keys(
+            report.member[0]
+          )
+        : [];
 
     report.depositColumnOrder =
-      report.deposit.length ? Object.keys(report.deposit[0]) : []
+      report.deposit.length > 0
+        ? Object.keys(
+            report.deposit[0]
+          )
+        : [];
 
     report.loanColumnOrder =
-      report.loan.length ? Object.keys(report.loan[0]) : []
+      report.loan.length > 0
+        ? Object.keys(
+            report.loan[0]
+          )
+        : [];
 
     report.jewelColumnOrder =
-      report.jewel.length ? Object.keys(report.jewel[0]) : []
+      report.jewel.length > 0
+        ? Object.keys(
+            report.jewel[0]
+          )
+        : [];
 
-    report.MemberColumnOrder= 
-      report.memberwise.length ? Object.keys(report.memberwise[0]) : []
+    report.MemberColumnOrder =
+      report.memberwise.length > 0
+        ? Object.keys(
+            report.memberwise[0]
+          )
+        : [];
 
-    /* ================= DEBUG ================= */
+    // ============================================================
+    // 9. DEBUG
+    // ============================================================
 
-    console.log("📦 FINAL REPORT:", {
-      member: report.member.length,
-      deposit: report.deposit.length,
-      loan: report.loan.length,
-      jewel: report.jewel.length,
-      memberwise: report.memberwise.length,
-    })
+    console.log(
+      "================================================"
+    );
 
-    /* ================= RETURN ================= */
+    console.log(
+      "📦 FINAL REPORT"
+    );
 
-    return NextResponse.json({
-      success: true,
-      report
-    })
+    console.log({
+      member:
+        report.member.length,
+
+      deposit:
+        report.deposit.length,
+
+      loan:
+        report.loan.length,
+
+      jewel:
+        report.jewel.length,
+
+      memberwise:
+        report.memberwise.length,
+
+      branch:
+        report.branch.length,
+
+      SDSCode:
+        report.npa.SDSCode,
+    });
+
+    console.log(
+      "================================================"
+    );
+
+    // ============================================================
+    // 10. RETURN
+    // ============================================================
+
+    return NextResponse.json(
+      {
+        success: true,
+
+        message:
+          "All assigned queries processed sequentially",
+
+        totalQueries:
+          selectedQueries.length,
+
+        report,
+      },
+      {
+        status: 200,
+      }
+    );
 
   } catch (err: any) {
 
-    console.error("🔥 RUN CLIENT ERROR:", err)
+    console.error(
+      "🔥 RUN CLIENT ERROR:",
+      err
+    );
 
     return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: 500 }
-    )
+      {
+        success: false,
+        error:
+          err?.message ||
+          "Server error",
+      },
+      {
+        status: 500,
+      }
+    );
 
   } finally {
-    client.release()
+    client.release();
   }
 }

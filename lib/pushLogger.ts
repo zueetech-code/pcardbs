@@ -20,7 +20,7 @@ export async function logPushStatus({
   try {
     await client.query(
       `
-      INSERT INTO push_logs (
+      INSERT INTO pcardb_push_logs (
         source,
         client_name,
         from_date,
