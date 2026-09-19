@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { LayoutDashboard, Users, UserCog, Users2, Database, FileText, Play, ScrollText } from "lucide-react"
 import { useEffect, useState } from "react"
-import { auth } from "@/lib/firebase-client"
+
 
 const adminMenuItems = [
   {
@@ -122,12 +122,7 @@ const agentMenuItems = [
     icon: LayoutDashboard,
     roles: ["agent"],
   },
-  {
-    title: "Generate Custom Report",
-    href: "/admin/agent-reports",
-    icon: FileText,
-    roles: ["agent"],
-  },
+  
    {
     title: "Fill Data",
     href: "/admin/fill-data",

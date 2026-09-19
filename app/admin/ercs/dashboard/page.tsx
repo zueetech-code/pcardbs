@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { auth } from "@/lib/firebase-client"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { FileText } from "lucide-react"
@@ -12,19 +11,37 @@ export default function ErcsDashboardPage() {
 
   useEffect(() => {
     const checkRole = async () => {
-      const user = auth.currentUser
-      if (!user) {
+      try {
+        const response = await fetch("/api/auth/session", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        })
+
+        if (!response.ok) {
+          router.push("/login")
+          return
+        }
+
+        const data = await response.json()
+
+        if (!data.user) {
+          router.push("/login")
+          return
+        }
+
+        if (data.user.role !== "ercs") {
+          router.push("/admin/dashboard")
+          return
+        }
+
+        setLoading(false)
+      } catch (error) {
+        console.error("Authentication check failed:", error)
         router.push("/login")
-        return
       }
-      const token = await user.getIdTokenResult()
-      const role = token.claims.role
-      if (role !== "ercs") {
-        router.push("/admin/dashboard")
-        return
-      }
-      setLoading(false)
     }
+
     checkRole()
   }, [router])
 
