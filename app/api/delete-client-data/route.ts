@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     const result = await client.query(
       `
-      DELETE FROM uccs_push_logs
+      DELETE FROM pcardb_push_logs
       WHERE client_name = $1
       AND from_date::date = $2
       `,
