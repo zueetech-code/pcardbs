@@ -5,12 +5,14 @@ export async function GET() {
 
   const result = await pool.query(`
     SELECT
-      client_id AS "clientId",
+      db_configs.client_id AS "clientId",
+	  c.name as clientname,
       host,
       port,
       database,
       updated_at AS "updatedAt"
     FROM db_configs
+	join clients c on c.client_id=db_configs.client_id
     ORDER BY updated_at DESC
   `)
 

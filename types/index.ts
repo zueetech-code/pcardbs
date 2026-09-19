@@ -29,6 +29,7 @@ export interface Agent {
 
 export interface DatabaseConfig {
   clientId: string
+  clientname: string
   host: string
   port: number
   database: string

@@ -10,6 +10,7 @@ const key = crypto
 
 interface SaveDbConfigInput {
   clientId: string
+  clientname:string
   host: string
   port: number
   database: string

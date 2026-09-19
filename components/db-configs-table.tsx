@@ -25,8 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { db } from "@/lib/firebase-client"
-import { doc, deleteDoc } from "firebase/firestore"
+
 
 interface DbConfigsTableProps {
   configs: DatabaseConfig[]
@@ -121,7 +120,7 @@ export function DbConfigsTable({ configs, clients, onDelete }: DbConfigsTablePro
           <TableBody>
             {configs.map((config) => (
               <TableRow key={config.clientId}>
-                <TableCell className="font-medium">{getClientName(config.clientId)}</TableCell>
+                <TableCell className="font-medium">{getClientName(config.clientname)}</TableCell>
                 <TableCell className="font-mono text-sm">{config.host}</TableCell>
                 <TableCell>{config.port}</TableCell>
                 <TableCell className="font-mono text-sm">{config.database}</TableCell>
