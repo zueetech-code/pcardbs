@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db } from "@/lib/firebase-client";
+
 import { collection, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -223,6 +223,59 @@ async function loadClients() {
     a.download = `push_result_${date}.json`;
     a.click();
   }
+  async function handleDeleteClient(
+  clientName: string,
+  date: string
+) {
+  if (!date) {
+    alert("Please select a date");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Delete ALL local data for ${clientName} on ${date}?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setLoading(true);
+
+    const res = await fetch("/api/delete-client-data", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        clientName,
+        date,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Delete failed");
+    }
+
+    alert(`${clientName} data deleted successfully`);
+
+    await loadLocalSubmitted();
+    await loadPushLogs();
+
+    setSelectedClients((prev) =>
+      prev.filter((c) => c !== clientName)
+    );
+
+  } catch (err: any) {
+    console.error("Delete error:", err);
+    alert(err?.message || "Delete failed");
+  } finally {
+    setLoading(false);
+  }
+}
+
+
 
   /* ================= PUSH ================= */
 
@@ -251,6 +304,7 @@ async function loadClients() {
       downloadJSON(data, pushDate);
 
       await loadPushLogs();
+      
 
     } catch (err) {
       console.error(err);
@@ -258,6 +312,7 @@ async function loadClients() {
       setLoading(false);
     }
   }
+  
 
   /* ================= UI ================= */
 
@@ -410,44 +465,65 @@ async function loadClients() {
       {/* TO BE PUSHED */}
 
       {view === "TO_BE_PUSHED" && (
-        <div className="space-y-4 border rounded p-4">
+  <div className="space-y-4 border rounded p-4">
 
-          <div className="max-h-60 overflow-y-auto border p-2 rounded">
-            {toBePushed.map((c, i) => (
-              <label key={`${c}-${i}`} className="flex gap-2">
-                <input
-                  type="checkbox"
-                  checked={selectedClients.includes(c)}
-                  onChange={(e) =>
-                    setSelectedClients((p) =>
-                      e.target.checked
-                        ? [...p, c]
-                        : p.filter((x) => x !== c)
-                    )
-                  }
-                />
-                {c}
-              </label>
-            ))}
-          </div>
+    <div className="max-h-60 overflow-y-auto border p-2 rounded space-y-2">
 
-          <input
-            type="date"
-            value={pushDate}
-            onChange={(e) => setPushDate(e.target.value)}
-            className="border rounded px-3 py-2"
-          />
+      {toBePushed.map((c, i) => (
+        <div
+          key={`${c}-${i}`}
+          className="flex items-center justify-between border-b pb-2"
+        >
 
+          <label className="flex gap-2 items-center">
+            <input
+              type="checkbox"
+              checked={selectedClients.includes(c)}
+              onChange={(e) =>
+                setSelectedClients((p) =>
+                  e.target.checked
+                    ? [...p, c]
+                    : p.filter((x) => x !== c)
+                )
+              }
+            />
+
+            <span>{c}</span>
+          </label>
+
+          {/* BEFORE PUSH DELETE */}
           <button
-            disabled={loading || selectedClients.length === 0}
-            onClick={handlePush}
-            className="bg-green-600 px-6 py-2 rounded disabled:opacity-50"
+            type="button"
+            disabled={loading}
+            onClick={() => handleDeleteClient(c, pushDate || selectedDate)}
+            className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50"
           >
-            {loading ? "Processing..." : "Push to RCS"}
+            Delete
           </button>
 
         </div>
-      )}
+      ))}
+
+    </div>
+
+    <input
+      type="date"
+      value={pushDate}
+      onChange={(e) => setPushDate(e.target.value)}
+      className="border rounded px-3 py-2"
+    />
+
+    <button
+      disabled={loading || selectedClients.length === 0}
+      onClick={handlePush}
+      className="bg-green-600 text-white px-6 py-2 rounded disabled:opacity-50"
+    >
+      {loading ? "Processing..." : "Push to RCS"}
+    </button>
+
+  </div>
+)}
+
       {view === "PUSHED" && (
   <div className="border rounded p-4 overflow-x-auto">
 
@@ -459,6 +535,7 @@ async function loadClients() {
           <th className="border px-3 py-2 text-left">Date</th>
           <th className="border px-3 py-2 text-left">Modules</th>
           <th className="border px-3 py-2 text-left">Status</th>
+          <th className="border px-3 py-2 text-left">Action</th>
         </tr>
       </thead>
 
@@ -490,6 +567,22 @@ async function loadClients() {
                 </span>
               )}
             </td>
+            <td className="border px-3 py-2">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() =>
+                handleDeleteClient(
+                  row.client_name,
+                  row.report_date
+                )
+              }
+              className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50"
+            >
+              Delete
+            </button>
+          </td>
+
 
           </tr>
         ))}
