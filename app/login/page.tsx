@@ -72,7 +72,7 @@ if (data.role === "ercs") {
           {/* Email field with icon */}
           <div className="space-y-1">
             <Label htmlFor="email" className="font-medium text-gray-700">
-              Email
+              Agent ID
             </Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -93,7 +93,7 @@ if (data.role === "ercs") {
           {/* Password field with icon */}
           <div className="space-y-1">
             <Label htmlFor="password" className="font-medium text-gray-700">
-              Password
+              Agent Password
             </Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />

@@ -1,6 +1,6 @@
 export type HeartbeatStatus = "online" | "offline";
 
-const OFFLINE_THRESHOLD_MS = 30 * 1000; // 30 seconds
+const OFFLINE_THRESHOLD_MS = 60 * 1000; // 30 seconds
 
 export function resolveHeartbeatStatus(
   lastSeen?: string | Date | null
