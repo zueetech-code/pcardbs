@@ -43,6 +43,7 @@ export async function POST(req: Request) {
     `,
     [clientId, name, district, status]
   )
+  
 
   return NextResponse.json({
     success: true,
