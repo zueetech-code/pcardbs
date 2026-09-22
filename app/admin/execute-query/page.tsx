@@ -62,9 +62,34 @@ export default function ExecuteQueryPage() {
   /* ================= INITIAL LOAD ================= */
   useEffect(() => {
     loadInitialData()
-    
   }, [])
-  
+  const districts = useMemo(() => {
+  const unique = new Set<string>()
+
+  clients.forEach((client: any) => {
+    if (client.district) {
+      unique.add(String(client.district).trim())
+    }
+  })
+
+  return [
+    "ALL",
+    ...Array.from(unique).sort(),
+  ]
+}, [clients])
+
+
+const filteredClients = useMemo(() => {
+  if (selectedDistrict === "ALL") {
+    return clients
+  }
+
+  return clients.filter(
+    (client: any) =>
+      String(client.district || "").trim() ===
+      selectedDistrict
+  )
+}, [clients, selectedDistrict])
 
   async function loadInitialData() {
   try {
@@ -108,83 +133,11 @@ export default function ExecuteQueryPage() {
     console.error("[ExecuteQuery] init error:", err)
   }
 }
-const fetchClients = async () => {
-  try {
-    setLoadingClients(true)
 
-    const res = await fetch("/api/clients", {
-      cache: "no-store",
-    })
 
-    if (!res.ok) {
-      throw new Error("Failed to load clients")
-    }
 
-    const data = await res.json()
 
-    console.log("Loaded clients:", data)
 
-    const normalizedClients: Client[] = Array.isArray(data)
-      ? data.map((c: any, index: number) => ({
-          ...c,
-          id:
-            c.id ||
-            c.client_id ||
-            `temp-${index}`,
-        }))
-      : []
-
-    setClients(normalizedClients)
-
-  } catch (error) {
-    console.error(
-      "Error loading clients:",
-      error
-    )
-
-    setClients([])
-
-  } finally {
-    setLoadingClients(false)
-  }
-}
-
-const districts = useMemo(() => {
-  const unique = new Set<string>()
-
-  clients.forEach((client: any) => {
-    if (
-      client.district &&
-      String(client.district).trim()
-    ) {
-      unique.add(
-        String(client.district).trim()
-      )
-    }
-  })
-
-  return [
-    "ALL",
-    ...Array.from(unique).sort(),
-  ]
-}, [clients])
-
-const filteredClients = useMemo(() => {
-
-  if (selectedDistrict === "ALL") {
-    return clients
-  }
-
-  return clients.filter(
-    (client: any) =>
-      String(client.district || "").trim() ===
-      selectedDistrict
-  )
-
-}, [
-  clients,
-  selectedDistrict,
-])
 
   /* ================= VARIABLES ================= */
   const selectedQuery = queries.find((q) => q.id === selectedQueryId)
