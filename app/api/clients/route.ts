@@ -5,39 +5,20 @@ import { randomBytes } from "crypto"
 export async function GET() {
   try {
     const result = await pool.query(`
-      SELECT
-        c.client_id AS "client_id",
-        c.name,
-        c.district,
-        c.status,
-
-        CASE
-          WHEN h.last_seen IS NULL THEN 'offline'
-
-          WHEN h.last_seen <
-               (NOW() AT TIME ZONE 'UTC') - INTERVAL '60 seconds'
-            THEN 'offline'
-
-          ELSE 'online'
-        END AS "status",
-
-        c.agent_uid AS "agentUid",
-        u.email AS "agentEmail",
-
-        TO_CHAR(
-          h.last_seen,
-          'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
-        ) AS "lastSeen"
-
-      FROM clients c
-
-      LEFT JOIN agent_heartbeats h
-        ON c.client_id = h.client_id
-
-      LEFT JOIN users u
-        ON c.agent_uid = u.id::text
-
-      ORDER BY c.created_at DESC
+     SELECT
+  c.client_id AS "client_id",
+  c.name,
+  c.district,
+  c.status,
+  c.agent_uid AS "agentUid",
+  u.email AS "agentEmail",
+ TO_CHAR(h.last_seen AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "lastSeen"
+FROM clients c
+LEFT JOIN agent_heartbeats h
+  ON c.client_id = h.client_id
+LEFT JOIN users u
+  ON c.agent_uid = u.id::text
+ORDER BY c.created_at DESC
     `);
 
     return NextResponse.json(result.rows);

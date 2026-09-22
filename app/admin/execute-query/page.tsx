@@ -582,50 +582,33 @@ const cols =
   </select>
 
 </div>
-            <div className="space-y-2">
+           
 
   <label className="text-sm font-medium">
     Client
   </label>
-
   <select
-    value={selectedClientId}
-    onChange={(e) => {
-      setSelectedClientId(
-        e.target.value
-      )
-    }}
-    className="w-full border rounded-md px-3 py-2"
-    disabled={loadingClients}
-  >
+  value={selectedClientId}
+  onChange={(e) =>
+    setSelectedClientId(e.target.value)
+  }
+  className="w-full border rounded-md px-3 py-2"
+>
+  <option value="">
+    Select Client
+  </option>
 
-    <option value="">
-      {loadingClients
-        ? "Loading clients..."
-        : "Select Client"}
+  {filteredClients.map((client) => (
+    <option
+      key={client.client_id}
+      value={client.client_id}
+    >
+      {client.name}
     </option>
+  ))}
+</select>
 
-    {filteredClients.map(
-      (client: any) => {
-
-        const clientId =
-          client.client_id ||
-          client.id
-
-        return (
-          <option
-            key={clientId}
-            value={clientId}
-          >
-            {client.name}
-          </option>
-        )
-      }
-    )}
-
-  </select>
-
-</div>
+  
 
             <Tabs
               value={executionType}
