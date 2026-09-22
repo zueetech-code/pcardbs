@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Card,
   CardContent,
@@ -28,16 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 
 
 import type { Client, Query, Command } from "@/types"
-import { db, auth } from "@/lib/firebase-client"
-import {
-  collection,
-  getDocs,
-  getDoc,
-  doc,
-  addDoc,
-  serverTimestamp,
-  deleteDoc,
-} from "firebase/firestore"
+
 
 export default function ExecuteQueryPage() {
   const [clients, setClients] = useState<Client[]>([])
@@ -55,6 +46,8 @@ export default function ExecuteQueryPage() {
   const [editedRows, setEditedRows] = useState<Record<number, Record<string, any>>>({})
   const [tableName, setTableName] = useState<string | null>(null)
   const [originalSQLs, setOriginalSQLs] = useState<string[]>([])
+  const [selectedDistrict, setSelectedDistrict] =useState<string>("ALL")
+  
 
 
 
@@ -68,7 +61,9 @@ export default function ExecuteQueryPage() {
   /* ================= INITIAL LOAD ================= */
   useEffect(() => {
     loadInitialData()
+    fetchClients()
   }, [])
+  
 
   async function loadInitialData() {
   try {
@@ -112,6 +107,100 @@ export default function ExecuteQueryPage() {
     console.error("[ExecuteQuery] init error:", err)
   }
 }
+const fetchClients = async () => {
+  try {
+
+    const res = await fetch(
+      "/api/clients",
+      {
+        cache: "no-store",
+      }
+    )
+
+    if (!res.ok) {
+      throw new Error(
+        "Failed to fetch clients"
+      )
+    }
+
+    const data = await res.json()
+
+    console.log(
+      "📦 /api/clients:",
+      data
+    )
+
+    const normalized = Array.isArray(data)
+      ? data.map(
+          (c: any, index: number) => ({
+            ...c,
+
+            id:
+              c.id ||
+              c.client_id ||
+              `temp-${index}`,
+          })
+        )
+      : []
+
+    setClients(normalized)
+
+  } catch (error) {
+
+    console.error(
+      "❌ Failed to load clients:",
+      error
+    )
+
+    setClients([])
+  }
+}
+
+const districts = useMemo(() => {
+
+  const unique = new Set<string>()
+
+  clients.forEach((c: any) => {
+
+    if (
+      c.district &&
+      String(c.district).trim()
+    ) {
+
+      unique.add(
+        String(c.district).trim()
+      )
+
+    }
+
+  })
+
+  return [
+    "ALL",
+    ...Array.from(unique).sort()
+  ]
+
+}, [clients])
+
+
+const filteredClients = useMemo(() => {
+
+  if (
+    selectedDistrict === "ALL"
+  ) {
+    return clients
+  }
+
+  return clients.filter(
+    (c: any) =>
+      String(c.district || "").trim() ===
+      selectedDistrict
+  )
+
+}, [
+  clients,
+  selectedDistrict
+])
 
   /* ================= VARIABLES ================= */
   const selectedQuery = queries.find((q) => q.id === selectedQueryId)
@@ -521,23 +610,88 @@ const cols =
           </CardHeader>
 
           <CardContent className="space-y-4">
-            <Label>Client</Label>
-            <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select client" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => {
-                  if (!c.client_id) return null
+            <div className="space-y-2">
 
-                  return (
-                    <SelectItem key={c.client_id} value={c.client_id}>
-                      {c.name || c.client_id}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
+            <label className="text-sm font-medium">
+              District
+            </label>
+
+            <select
+              value={selectedDistrict}
+              onChange={(e) => {
+
+                const district =
+                  e.target.value
+
+                setSelectedDistrict(
+                  district
+                )
+
+                // Reset client when district changes
+                setSelectedClientId("")
+
+              }}
+              className="w-full border rounded-md px-3 py-2"
+            >
+
+              {districts.map(
+                (district) => (
+
+                  <option
+                    key={district}
+                    value={district}
+                  >
+                    {district}
+                  </option>
+
+                )
+              )}
+
+            </select>
+
+          </div>
+            <div className="space-y-2">
+
+          <label className="text-sm font-medium">
+            Client
+          </label>
+
+          <select
+            value={selectedClientId}
+            onChange={(e) =>
+              setSelectedClientId(
+                e.target.value
+              )
+            }
+            className="w-full border rounded-md px-3 py-2"
+          >
+
+            <option value="">
+              Select Client
+            </option>
+
+            {filteredClients.map(
+              (client: any) => {
+
+                const clientId =
+                  client.client_id ||
+                  client.id
+
+                return (
+                  <option
+                    key={clientId}
+                    value={clientId}
+                  >
+                    {client.name}
+                  </option>
+                )
+
+              }
+            )}
+
+          </select>
+
+        </div>
 
             <Tabs
               value={executionType}

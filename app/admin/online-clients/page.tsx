@@ -45,6 +45,7 @@ export default function OnlineClientsPage() {
     fetchClients()
   }, [])
 
+  
   /* ================= ONLY ONLINE CLIENTS ================= */
 
   const onlineClients = useMemo(() => {
@@ -93,22 +94,72 @@ export default function OnlineClientsPage() {
         </select>
 
         {/* CHECK STATUS BUTTON */}
-        <button
-          onClick={async () => {
-            try {
-              const res = await fetch("/api/clients/execute-online-status")
-              const data = await res.json()
-             alert(`Processed ${data.processedClients} clients`)
-              fetchClients()
-            } catch (err) {
-              console.error(err)
-              alert("Error checking online status")
-            }
-          }}
-          className="bg-green-600 text-white px-4 py-2 rounded"
-        >
-          Check Online Status
-        </button>
+         <button
+            onClick={async () => {
+
+              try {
+
+                const res = await fetch(
+                  "/api/clients/execute-online-status",
+                  {
+                    method: "POST",
+
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+
+                    body: JSON.stringify({
+
+                      queryId:
+                        "qry_1773916210321",
+
+                      district:
+                        selectedDistrict,
+
+                    }),
+                  }
+                );
+
+
+                const data =
+                  await res.json();
+
+
+                if (!res.ok || !data.success) {
+
+                  throw new Error(
+                    data.error ||
+                    "Execution failed"
+                  );
+
+                }
+
+
+                alert(
+                  `Commands created: ${data.commandsCreated}`
+                );
+
+
+                fetchClients();
+
+
+              } catch (err) {
+
+                console.error(err);
+
+                alert(
+                  err instanceof Error
+                    ? err.message
+                    : "Error checking online status"
+                );
+
+              }
+
+            }}
+            className="bg-green-600 text-white px-4 py-2 rounded"
+          >
+            Check Online Status
+          </button>
       </div>
 
       {/* ================= TABLE ================= */}
