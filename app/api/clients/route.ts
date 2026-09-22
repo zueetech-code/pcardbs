@@ -9,6 +9,7 @@ export async function GET() {
         c.client_id AS "client_id",
         c.name,
         c.district,
+        c.status,
 
         CASE
           WHEN h.last_seen IS NULL THEN 'offline'

@@ -63,33 +63,7 @@ export default function ExecuteQueryPage() {
   useEffect(() => {
     loadInitialData()
   }, [])
-  const districts = useMemo(() => {
-  const unique = new Set<string>()
-
-  clients.forEach((client: any) => {
-    if (client.district) {
-      unique.add(String(client.district).trim())
-    }
-  })
-
-  return [
-    "ALL",
-    ...Array.from(unique).sort(),
-  ]
-}, [clients])
-
-
-const filteredClients = useMemo(() => {
-  if (selectedDistrict === "ALL") {
-    return clients
-  }
-
-  return clients.filter(
-    (client: any) =>
-      String(client.district || "").trim() ===
-      selectedDistrict
-  )
-}, [clients, selectedDistrict])
+  
 
   async function loadInitialData() {
   try {
@@ -135,7 +109,33 @@ const filteredClients = useMemo(() => {
 }
 
 
+const districts = useMemo(() => {
+  const unique = new Set<string>()
 
+  clients.forEach((c: any) => {
+    if (c.district) {
+      unique.add(String(c.district).trim())
+    }
+  })
+
+  return [
+    "ALL",
+    ...Array.from(unique).sort(),
+  ]
+}, [clients])
+
+
+const filteredClients = useMemo(() => {
+  if (selectedDistrict === "ALL") {
+    return clients
+  }
+
+  return clients.filter(
+    (c: any) =>
+      String(c.district || "").trim() ===
+      selectedDistrict
+  )
+}, [clients, selectedDistrict])
 
 
 
