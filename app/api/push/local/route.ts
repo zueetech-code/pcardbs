@@ -11,10 +11,9 @@ const BATCH_SIZE = 10
 const REQUEST_TIMEOUT = 15000
 
 const DEPOSIT_LOAN_URL =
-  "https://dashboard.kooturavu.tn.gov.in/v1/api/uccs/deposit_loan/upsert"
-
+  "https://dashboard.kooturavu.tn.gov.in/v1/api/pcardb/deposit_loan/upsert"
 const JEWEL_URL =
-  "https://dashboard.kooturavu.tn.gov.in/v1/api/uccs/jwel/upsert"
+  "https://dashboard.kooturavu.tn.gov.in/v1/api/pcardb/jwel/upsert"
 
 /* ================= KEEP ALIVE ================= */
 
