@@ -47,6 +47,7 @@ export default function ExecuteQueryPage() {
   const [tableName, setTableName] = useState<string | null>(null)
   const [originalSQLs, setOriginalSQLs] = useState<string[]>([])
   const [selectedDistrict, setSelectedDistrict] =useState<string>("ALL")
+  const [loadingClients, setLoadingClients] = useState(true)
   
 
 
@@ -61,7 +62,7 @@ export default function ExecuteQueryPage() {
   /* ================= INITIAL LOAD ================= */
   useEffect(() => {
     loadInitialData()
-    fetchClients()
+    
   }, [])
   
 
@@ -109,97 +110,80 @@ export default function ExecuteQueryPage() {
 }
 const fetchClients = async () => {
   try {
+    setLoadingClients(true)
 
-    const res = await fetch(
-      "/api/clients",
-      {
-        cache: "no-store",
-      }
-    )
+    const res = await fetch("/api/clients", {
+      cache: "no-store",
+    })
 
     if (!res.ok) {
-      throw new Error(
-        "Failed to fetch clients"
-      )
+      throw new Error("Failed to load clients")
     }
 
     const data = await res.json()
 
-    console.log(
-      "📦 /api/clients:",
-      data
-    )
+    console.log("Loaded clients:", data)
 
-    const normalized = Array.isArray(data)
-      ? data.map(
-          (c: any, index: number) => ({
-            ...c,
-
-            id:
-              c.id ||
-              c.client_id ||
-              `temp-${index}`,
-          })
-        )
+    const normalizedClients: Client[] = Array.isArray(data)
+      ? data.map((c: any, index: number) => ({
+          ...c,
+          id:
+            c.id ||
+            c.client_id ||
+            `temp-${index}`,
+        }))
       : []
 
-    setClients(normalized)
+    setClients(normalizedClients)
 
   } catch (error) {
-
     console.error(
-      "❌ Failed to load clients:",
+      "Error loading clients:",
       error
     )
 
     setClients([])
+
+  } finally {
+    setLoadingClients(false)
   }
 }
 
 const districts = useMemo(() => {
-
   const unique = new Set<string>()
 
-  clients.forEach((c: any) => {
-
+  clients.forEach((client: any) => {
     if (
-      c.district &&
-      String(c.district).trim()
+      client.district &&
+      String(client.district).trim()
     ) {
-
       unique.add(
-        String(c.district).trim()
+        String(client.district).trim()
       )
-
     }
-
   })
 
   return [
     "ALL",
-    ...Array.from(unique).sort()
+    ...Array.from(unique).sort(),
   ]
-
 }, [clients])
-
 
 const filteredClients = useMemo(() => {
 
-  if (
-    selectedDistrict === "ALL"
-  ) {
+  if (selectedDistrict === "ALL") {
     return clients
   }
 
   return clients.filter(
-    (c: any) =>
-      String(c.district || "").trim() ===
+    (client: any) =>
+      String(client.district || "").trim() ===
       selectedDistrict
   )
 
 }, [
   clients,
-  selectedDistrict
+  selectedDistrict,
 ])
 
   /* ================= VARIABLES ================= */
@@ -612,86 +596,83 @@ const cols =
           <CardContent className="space-y-4">
             <div className="space-y-2">
 
-            <label className="text-sm font-medium">
-              District
-            </label>
+  <label className="text-sm font-medium">
+    District
+  </label>
 
-            <select
-              value={selectedDistrict}
-              onChange={(e) => {
+  <select
+    value={selectedDistrict}
+    onChange={(e) => {
 
-                const district =
-                  e.target.value
+      setSelectedDistrict(
+        e.target.value
+      )
 
-                setSelectedDistrict(
-                  district
-                )
+      // Reset client selection
+      setSelectedClientId("")
 
-                // Reset client when district changes
-                setSelectedClientId("")
+    }}
+    className="w-full border rounded-md px-3 py-2"
+  >
 
-              }}
-              className="w-full border rounded-md px-3 py-2"
-            >
+    {districts.map((district) => (
 
-              {districts.map(
-                (district) => (
+      <option
+        key={district}
+        value={district}
+      >
+        {district}
+      </option>
 
-                  <option
-                    key={district}
-                    value={district}
-                  >
-                    {district}
-                  </option>
+    ))}
 
-                )
-              )}
+  </select>
 
-            </select>
-
-          </div>
+</div>
             <div className="space-y-2">
 
-          <label className="text-sm font-medium">
-            Client
-          </label>
+  <label className="text-sm font-medium">
+    Client
+  </label>
 
-          <select
-            value={selectedClientId}
-            onChange={(e) =>
-              setSelectedClientId(
-                e.target.value
-              )
-            }
-            className="w-full border rounded-md px-3 py-2"
+  <select
+    value={selectedClientId}
+    onChange={(e) => {
+      setSelectedClientId(
+        e.target.value
+      )
+    }}
+    className="w-full border rounded-md px-3 py-2"
+    disabled={loadingClients}
+  >
+
+    <option value="">
+      {loadingClients
+        ? "Loading clients..."
+        : "Select Client"}
+    </option>
+
+    {filteredClients.map(
+      (client: any) => {
+
+        const clientId =
+          client.client_id ||
+          client.id
+
+        return (
+          <option
+            key={clientId}
+            value={clientId}
           >
+            {client.name}
+          </option>
+        )
+      }
+    )}
 
-            <option value="">
-              Select Client
-            </option>
+  </select>
 
-            {filteredClients.map(
-              (client: any) => {
-
-                const clientId =
-                  client.client_id ||
-                  client.id
-
-                return (
-                  <option
-                    key={clientId}
-                    value={clientId}
-                  >
-                    {client.name}
-                  </option>
-                )
-
-              }
-            )}
-
-          </select>
-
-        </div>
+</div>
 
             <Tabs
               value={executionType}
