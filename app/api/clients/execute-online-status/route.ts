@@ -176,12 +176,12 @@ async function insertCashBalance(
     resultRes.rows[0].row_data
   );
 
-  console.log(
-    "📦 Result:",
-    client.name,
-    lastClosingDate,
-    lastClosingBalance
-  );
+  // console.log(
+  //   "📦 Result:",
+  //   client.name,
+  //   lastClosingDate,
+  //   lastClosingBalance
+  // );
 
   /* ==========================================================
      VALIDATE RESULT
