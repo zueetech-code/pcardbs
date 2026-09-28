@@ -22,7 +22,7 @@ export async function GET() {
   safety_inserted,
   created_at,
   submission_type
-FROM report_insert_log;
+FROM report_insert_log where and sds_code not like '%TEMP_SDS%';
     `);
     //console.log("Last submitted data query result:", result.rows);
 
