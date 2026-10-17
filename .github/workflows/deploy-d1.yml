@@ -15,10 +15,12 @@ concurrency:
 
 jobs:
   deploy:
+    name: Deploy Next.js to Production
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
+      # STEP 1: Prepare and validate SSH credentials
       - name: Prepare SSH files
         shell: bash
         env:
@@ -26,13 +28,87 @@ jobs:
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
+
+          echo "Preparing SSH directory..."
+
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+          if [[ -z "$DEPLOY_SSH_KEY" ]]; then
+            echo "ERROR: DEPLOY_SSH_KEY secret is missing."
+            exit 1
+          fi
+
+          if [[ -z "$DEPLOY_KNOWN_HOSTS" ]]; then
+            echo "ERROR: DEPLOY_KNOWN_HOSTS secret is missing."
+            exit 1
+          fi
+
+          printf '%s\n' "$DEPLOY_SSH_KEY" \
+            > "$HOME/.ssh/id_ed25519"
+
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" \
+            > "$HOME/.ssh/known_hosts"
+
           chmod 600 "$HOME/.ssh/id_ed25519"
           chmod 600 "$HOME/.ssh/known_hosts"
 
+          echo "Validating SSH private key..."
+
+          if ! ssh-keygen -y \
+              -f "$HOME/.ssh/id_ed25519" \
+              > /dev/null 2>&1; then
+            echo "ERROR: DEPLOY_SSH_KEY is not a readable private key."
+            echo "Check that you copied the complete private key."
+            exit 1
+          fi
+
+          echo "PASS: SSH private key is readable."
+
+          echo "Validating known_hosts file..."
+
+          if [[ ! -s "$HOME/.ssh/known_hosts" ]]; then
+            echo "ERROR: known_hosts file is empty."
+            exit 1
+          fi
+
+          echo "PASS: SSH files prepared."
+
+      # STEP 2: Validate connection settings and test SSH
+      - name: Test SSH connection
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$DEPLOY_HOST" ]]; then
+            echo "ERROR: DEPLOY_HOST secret is missing."
+            exit 1
+          fi
+
+          if [[ ! "$DEPLOY_PORT" =~ ^[0-9]+$ ]] ||
+             (( DEPLOY_PORT < 1 || DEPLOY_PORT > 65535 )); then
+            echo "ERROR: DEPLOY_PORT must be a valid TCP port."
+            exit 1
+          fi
+
+          echo "Testing SSH connectivity..."
+
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o IdentitiesOnly=yes \
+            -p "$DEPLOY_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "deploy@$DEPLOY_HOST" \
+            'whoami'
+
+          echo "PASS: SSH connection successful."
+
+      # STEP 3: Run the existing server deployment script
       - name: Run server deployment
         shell: bash
         env:
@@ -40,11 +116,17 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           set -euo pipefail
+
+          echo "Starting production deployment..."
+
           ssh \
             -i "$HOME/.ssh/id_ed25519" \
+            -o IdentitiesOnly=yes \
             -p "$DEPLOY_PORT" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=15 \
             "deploy@$DEPLOY_HOST" \
             'sudo -n /usr/local/bin/deploy-d1'
+
+          echo "SUCCESS: Production deployment command completed."
